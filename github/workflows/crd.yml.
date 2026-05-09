@@ -1,0 +1,59 @@
+name: Windows RDP via Browser
+
+on:
+  workflow_dispatch:
+    inputs:
+      auth_code:
+        description: 'کد 12 رقمی از سایت https://remotedesktop.google.com/headless'
+        required: true
+        type: string
+      pin:
+        description: 'یک رمز 6 رقمی برای اتصال'
+        required: true
+        default: '123456'
+        type: string
+
+jobs:
+  build:
+    runs-on: windows-2022
+    steps:
+    - name: Download and Install Chrome Remote Desktop Host
+      run: |
+        # دانلود مستقیم فایل نصاب کامل (MSI)
+        Invoke-WebRequest -Uri "https://dl.google.com/remote/desktop/chromeremotedesktop.msi" -OutFile "CRD.msi"
+        
+        # نصب بی‌صدا با استفاده از msiexec
+        msiexec /i "CRD.msi" /quiet /norestart
+        
+        Write-Output "نصب Chrome Remote Desktop انجام شد."
+        
+    - name: Enable RDP (Optional)
+      run: |
+        # فعال کردن RDP (در صورتی که نیاز باشه)
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
+        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+        
+    - name: Setup Host using Auth Code
+      run: |
+        $ErrorActionPreference = 'Stop'
+        
+        # مسیر فایل اجرایی Chrome Remote Desktop
+        $CRDPath = "${env:ProgramFiles(x86)}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe"
+        
+        # چک کردن وجود فایل
+        if (-not (Test-Path $CRDPath)) {
+            Write-Error "فایل Chrome Remote Desktop پیدا نشد! نصب مجدد نیاز است."
+            exit 1
+        }
+        
+        # دستور نصب با استفاده از کد احراز هویت و رمز دریافتی
+        & $CRDPath --code="${{ github.event.inputs.auth_code }}" --redirect-url="https://remotedesktop.google.com/headless" --pin="${{ github.event.inputs.pin }}"
+        
+        Write-Output "========================================="
+        Write-Output "✅ تنظیمات با موفقیت انجام شد!"
+        Write-Output "حالا به آدرس https://remotedesktop.google.com/access برو"
+        Write-Output "و با رمز ${{ github.event.inputs.pin }} وصل شو."
+        Write-Output "========================================="
+        
+        # نگه داشتن سرور (6 ساعت)
+        for ($i = 0; $i -lt 360; $i++) { Start-Sleep -Seconds 60 }
